@@ -1,87 +1,63 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>WebRTC File Sharing</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 20px;
-        }
-        #dropZone {
-            margin-top: 20px;
-            padding: 20px;
-            border: 2px dashed #ccc;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>ファイル共有システム</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    #fileInput {
+      margin: 20px 0;
+    }
+    #shareLink {
+      margin: 20px;
+      color: blue;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-    <h1>WebRTC File Sharing</h1>
-    <div id="dropZone">Drop files here to share</div>
-    <div id="messages"></div>
-    <script>
-        const signalingServer "https://tsuk.deno.dev/"; // Deno DeployスクリプトのURL
-        const messages = document.getElementById("messages");
-        const dropZone = document.getElementById("dropZone");
+  <h1>ファイル共有システム</h1>
+  <p>ファイルを選択してください:</p>
+  <input type="file" id="fileInput" />
+  <button id="uploadBtn">アップロード</button>
+  <p id="shareLink"></p>
 
-        let peerConnection;
-        let dataChannel;
+  <script>
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const shareLink = document.getElementById('shareLink');
 
-        async function createRoom() {
-            const res = await fetch(`${signalingServer}/create-room`);
-            return res.text();
-        }
+    uploadBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        alert('ファイルを選択してください');
+        return;
+      }
 
-        async function sendOffer(roomId, offer) {
-            await fetch(`${signalingServer}/set-offer?roomId=${roomId}`, {
-                method: "POST",
-                body: JSON.stringify(offer)
-            });
-        }
+      // ファイルをサーバーに送信
+      const formData = new FormData();
+      formData.append('file', file);
 
-        async function getOffer(roomId) {
-            const res = await fetch(`${signalingServer}/get-offer?roomId=${roomId}`);
-            return res.status === 200 ? JSON.parse(await res.text()) : null;
-        }
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-        async function sendAnswer(roomId, answer) {
-            await fetch(`${signalingServer}/set-answer?roomId=${roomId}`, {
-                method: "POST",
-                body: JSON.stringify(answer)
-            });
-        }
-
-        async function getAnswer(roomId) {
-            const res = await fetch(`${signalingServer}/get-answer?roomId=${roomId}`);
-            return res.status === 200 ? JSON.parse(await res.text()) : null;
-        }
-
-        async function handleFiles(files) {
-            const roomId = await createRoom();
-            messages.textContent = `Share this link: ${signalingServer}?roomId=${roomId}`;
-            peerConnection = new RTCPeerConnection();
-            dataChannel = peerConnection.createDataChannel("fileTransfer");
-
-            dataChannel.onopen = () => {
-                dataChannel.send(files[0]);
-                messages.textContent = "File sent!";
-            };
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            await sendOffer(roomId, peerConnection.localDescription);
-
-            const answer = await getAnswer(roomId);
-            await peerConnection.setRemoteDescription(answer);
-        }
-
-        dropZone.addEventListener("dragover", (e) => e.preventDefault());
-        dropZone.addEventListener("drop", (e) => {
-            e.preventDefault();
-            handleFiles(e.dataTransfer.files);
-        });
-    </script>
+      if (response.ok) {
+        const { url } = await response.json();
+        shareLink.textContent = `共有リンク: ${url}`;
+        shareLink.onclick = () => {
+          navigator.clipboard.writeText(url);
+          alert('リンクをコピーしました');
+        };
+      } else {
+        alert('アップロードに失敗しました');
+      }
+    });
+  </script>
 </body>
 </html>
