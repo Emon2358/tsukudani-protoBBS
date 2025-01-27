@@ -2,8 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>★tsukudani@protobbs⭐︎</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <title>WebRTC ファイル共有</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,8 +10,8 @@
             margin: 0 auto;
             padding: 20px;
             text-align: center;
-            color: white;
             background-color: #2c3e50;
+            color: white;
         }
         #dropZone {
             border: 2px dashed #ccc;
@@ -33,25 +32,21 @@
             margin-top: 20px;
             white-space: pre-wrap;
         }
-        #qrCode {
-            margin-top: 20px;
-        }
     </style>
 </head>
 <body>
-    <h1>★tsukudani@protobbs⭐︎</h1>
+    <h1>WebRTC ファイル共有</h1>
     <div id="dropZone">
-        ファイルをここにドラッグ＆ドロップしてねん。
+        ファイルをここにドラッグ＆ドロップしてください。
     </div>
     <button id="sendButton" disabled>リンクを生成</button>
-    <div id="qrCode"></div>
-    <p id="connectionInfo"></p>
-    <div id="message"></div>
+    <p id="shareLink"></p>
+    <p id="message"></p>
+
     <script>
         const dropZone = document.getElementById('dropZone');
         const sendButton = document.getElementById('sendButton');
-        const qrCodeDiv = document.getElementById('qrCode');
-        const connectionInfo = document.getElementById('connectionInfo');
+        const shareLink = document.getElementById('shareLink');
         const messageDiv = document.getElementById('message');
 
         let peerConnection;
@@ -59,12 +54,7 @@
 
         const config = {
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                {
-                    urls: "turn:your.turn.server:3478",
-                    username: "your-username",
-                    credential: "your-password"
-                }
+                { urls: "stun:stun.l.google.com:19302" }
             ]
         };
 
@@ -89,7 +79,7 @@
         // ファイルを処理
         function handleFile(file) {
             sendButton.disabled = false;
-            sendButton.textContent = `${file.name} を共有する準備ができましたん`;
+            sendButton.textContent = `${file.name} を共有する準備ができました`;
             sendButton.addEventListener("click", () => initiateConnection(file));
         }
 
@@ -99,7 +89,7 @@
             dataChannel = peerConnection.createDataChannel("fileTransfer");
 
             dataChannel.onopen = () => {
-                messageDiv.textContent = "接続が確立しました。ファイルを送信しますん...";
+                messageDiv.textContent = "接続が確立しました。ファイルを送信します...";
                 sendFile(file);
             };
 
@@ -111,20 +101,26 @@
                 if (event.candidate) return;
 
                 const offer = JSON.stringify(peerConnection.localDescription);
-                generateQRCode(offer);
+                const encodedOffer = encodeURIComponent(offer);
+                const link = `${window.location.origin}${window.location.pathname}?offer=${encodedOffer}`;
+                shareLink.innerHTML = `<a href="${link}" target="_blank">${link}</a>`;
+                navigator.clipboard.writeText(link).then(() => {
+                    messageDiv.textContent = "リンクをクリップボードにコピーしました！";
+                });
             };
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
         }
 
-        // QRコード生成
-        function generateQRCode(data) {
-            qrCodeDiv.innerHTML = '';
-            QRCode.toCanvas(document.createElement("canvas"), data, (err, canvas) => {
-                if (err) throw err;
-                qrCodeDiv.appendChild(canvas);
-            });
+        // ファイル送信
+        function sendFile(file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                dataChannel.send(reader.result);
+                messageDiv.textContent = "ファイル送信が完了しました！";
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         // リモート接続を開始（受信側）
@@ -135,21 +131,17 @@
                 dataChannel = event.channel;
 
                 const receivedChunks = [];
-                let receivedSize = 0;
-
                 dataChannel.onmessage = (e) => {
                     receivedChunks.push(e.data);
-                    receivedSize += e.data.byteLength;
 
-                    messageDiv.textContent = `ファイル受信中... (${Math.round(receivedSize / 1024)} KB)`;
+                    // 受信したデータをダウンロード
+                    const blob = new Blob(receivedChunks);
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = "received_file";
+                    link.click();
 
-                    if (receivedSize === parseInt(e.data.byteLength)) {
-                        downloadFile(receivedChunks);
-                    }
-                };
-
-                dataChannel.onclose = () => {
-                    messageDiv.textContent = "データチャネルが閉じられました〜ん";
+                    messageDiv.textContent = "ファイル受信が完了しました！";
                 };
             };
 
@@ -158,17 +150,7 @@
             await peerConnection.setLocalDescription(answer);
         }
 
-        // ファイルをダウンロード
-        function downloadFile(chunks) {
-            const blob = new Blob(chunks);
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = "received_file";
-            link.click();
-            messageDiv.textContent = "ファイル受信が完了しました〜ん";
-        }
-
-        // オファーから接続を処理
+        // オファーがURLに含まれている場合、受信処理を開始
         const urlParams = new URLSearchParams(window.location.search);
         const offerParam = urlParams.get("offer");
         if (offerParam) {
