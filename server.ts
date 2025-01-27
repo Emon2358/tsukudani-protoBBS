@@ -1,45 +1,34 @@
-import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
+// server.js (Deno Deploy)
+import { serve } from "https://deno.land/std@0.139.0/http/server.ts";
 
-const files = new Map(); // メモリ内でファイルを管理
-
+// プロキシサーバーのエントリポイント
 serve(async (req) => {
   const url = new URL(req.url);
+  const targetUrl = url.searchParams.get("target");
 
-  // ファイルアップロードの処理
-  if (req.method === "POST" && url.pathname === "/upload") {
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-
-    if (file) {
-      const fileId = crypto.randomUUID(); // 一意のIDを生成
-      files.set(fileId, file);
-
-      const shareUrl = `${url.origin}/download/${fileId}`;
-      return new Response(JSON.stringify({ url: shareUrl }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response("ファイルが見つかりません", { status: 400 });
+  if (!targetUrl) {
+    return new Response("URLが指定されていません", { status: 400 });
   }
 
-  // ファイルダウンロードの処理
-  if (req.method === "GET" && url.pathname.startsWith("/download/")) {
-    const fileId = url.pathname.split("/").pop();
-    const file = files.get(fileId);
+  try {
+    // ターゲットURLをURLオブジェクトに変換
+    const target = new URL(targetUrl);
 
-    if (file) {
-      return new Response(file.stream(), {
-        headers: {
-          "Content-Disposition": `attachment; filename="${file.name}"`,
-          "Content-Type": file.type,
-        },
-      });
-    }
+    // リクエストをターゲットURLに転送
+    const response = await fetch(target, {
+      method: req.method,
+      headers: req.headers,
+      body: req.body,
+    });
 
-    return new Response("ファイルが存在しません", { status: 404 });
+    // レスポンスをそのまま返す
+    const responseBody = await response.text();
+    return new Response(responseBody, {
+      status: response.status,
+      headers: response.headers,
+    });
+  } catch (error) {
+    console.error("エラー:", error);
+    return new Response("リクエスト処理中にエラーが発生しました", { status: 500 });
   }
-
-  // その他のリクエストは404
-  return new Response("Not Found", { status: 404 });
 });
