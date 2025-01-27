@@ -4,7 +4,45 @@
     <meta charset="UTF-8">
     <title>tsukudani@protoBBS</title>
     <style>
-        /* 以前のスタイルはそのまま使用 */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        #dropZone {
+            border: 2px dashed #ccc;
+            border-radius: 20px;
+            width: 100%;
+            padding: 50px;
+            text-align: center;
+            background-color: white;
+            transition: all 0.3s ease;
+        }
+        #dropZone.dragover {
+            background-color: #e0e0e0;
+            border-color: #999;
+        }
+        #fileList {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .file-item {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .share-link {
+            color: blue;
+            text-decoration: underline;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
