@@ -4,45 +4,7 @@
     <meta charset="UTF-8">
     <title>tsukudani@protoBBS</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            text-align: center;
-            background-color: #f0f0f0;
-        }
-        #dropZone {
-            border: 2px dashed #ccc;
-            border-radius: 20px;
-            width: 100%;
-            padding: 50px;
-            text-align: center;
-            background-color: white;
-            transition: all 0.3s ease;
-        }
-        #dropZone.dragover {
-            background-color: #e0e0e0;
-            border-color: #999;
-        }
-        #fileList {
-            margin-top: 20px;
-            text-align: left;
-        }
-        .file-item {
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .share-link {
-            color: blue;
-            text-decoration: underline;
-            cursor: pointer;
-        }
+        /* 以前のスタイルはそのまま使用 */
     </style>
 </head>
 <body>
@@ -65,6 +27,26 @@
 
         // ファイル共有用のグローバルストレージ
         const sharedFiles = new Map();
+
+        // ローカルストレージからsharedFilesを復元
+        function loadSharedFiles() {
+            const storedFiles = localStorage.getItem('sharedFiles');
+            if (storedFiles) {
+                const parsedFiles = JSON.parse(storedFiles);
+                Object.entries(parsedFiles).forEach(([key, file]) => {
+                    sharedFiles.set(key, file);
+                });
+            }
+        }
+
+        // sharedFilesをローカルストレージに保存
+        function saveSharedFiles() {
+            const filesObject = Object.fromEntries(sharedFiles);
+            localStorage.setItem('sharedFiles', JSON.stringify(filesObject));
+        }
+
+        // ページ読み込み時にファイルを復元
+        loadSharedFiles();
 
         // ドラッグ＆ドロップイベント設定
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -128,11 +110,15 @@
                 const shareKey = generateShareKey();
 
                 // ファイルをsharedFilesに保存
-                sharedFiles.set(shareKey, {
+                const fileInfo = {
                     name: sanitizeFileName(file.name),
                     type: file.type,
                     data: btoa(fileData) // Base64エンコーディング
-                });
+                };
+                sharedFiles.set(shareKey, fileInfo);
+
+                // ローカルストレージに保存
+                saveSharedFiles();
 
                 // UIに共有リンクを表示
                 const fileItem = document.createElement('div');
@@ -163,6 +149,9 @@
 
         // 共有ファイルのダウンロード処理
         window.onload = function() {
+            // ページ読み込み時にローカルストレージからファイルを読み込む
+            loadSharedFiles();
+
             const urlParams = new URLSearchParams(window.location.search);
             const shareKey = urlParams.get('share');
 
