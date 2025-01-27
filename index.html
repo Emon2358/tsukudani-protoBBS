@@ -2,161 +2,86 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>WebRTC ファイル共有</title>
+    <title>WebRTC File Sharing</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
             text-align: center;
-            background-color: #2c3e50;
-            color: white;
+            margin: 0;
+            padding: 20px;
         }
         #dropZone {
-            border: 2px dashed #ccc;
-            border-radius: 10px;
-            padding: 30px;
-            background-color: rgba(255, 255, 255, 0.1);
-            margin-bottom: 20px;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #message {
             margin-top: 20px;
-            white-space: pre-wrap;
+            padding: 20px;
+            border: 2px dashed #ccc;
         }
     </style>
 </head>
 <body>
-    <h1>WebRTC ファイル共有</h1>
-    <div id="dropZone">
-        ファイルをここにドラッグ＆ドロップしてください。
-    </div>
-    <button id="sendButton" disabled>リンクを生成</button>
-    <p id="shareLink"></p>
-    <p id="message"></p>
-
+    <h1>WebRTC File Sharing</h1>
+    <div id="dropZone">Drop files here to share</div>
+    <div id="messages"></div>
     <script>
-        const dropZone = document.getElementById('dropZone');
-        const sendButton = document.getElementById('sendButton');
-        const shareLink = document.getElementById('shareLink');
-        const messageDiv = document.getElementById('message');
+        const signalingServer = "https://your-deno-deploy-url"; // Deno DeployスクリプトのURL
+        const messages = document.getElementById("messages");
+        const dropZone = document.getElementById("dropZone");
 
         let peerConnection;
         let dataChannel;
 
-        const config = {
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }
-            ]
-        };
-
-        // ドラッグ＆ドロップでファイルを取得
-        dropZone.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = "green";
-        });
-
-        dropZone.addEventListener("dragleave", () => {
-            dropZone.style.borderColor = "#ccc";
-        });
-
-        dropZone.addEventListener("drop", (e) => {
-            e.preventDefault();
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        });
-
-        // ファイルを処理
-        function handleFile(file) {
-            sendButton.disabled = false;
-            sendButton.textContent = `${file.name} を共有する準備ができました`;
-            sendButton.addEventListener("click", () => initiateConnection(file));
+        async function createRoom() {
+            const res = await fetch(`${signalingServer}/create-room`);
+            return res.text();
         }
 
-        // WebRTC接続を初期化
-        async function initiateConnection(file) {
-            peerConnection = new RTCPeerConnection(config);
+        async function sendOffer(roomId, offer) {
+            await fetch(`${signalingServer}/set-offer?roomId=${roomId}`, {
+                method: "POST",
+                body: JSON.stringify(offer)
+            });
+        }
+
+        async function getOffer(roomId) {
+            const res = await fetch(`${signalingServer}/get-offer?roomId=${roomId}`);
+            return res.status === 200 ? JSON.parse(await res.text()) : null;
+        }
+
+        async function sendAnswer(roomId, answer) {
+            await fetch(`${signalingServer}/set-answer?roomId=${roomId}`, {
+                method: "POST",
+                body: JSON.stringify(answer)
+            });
+        }
+
+        async function getAnswer(roomId) {
+            const res = await fetch(`${signalingServer}/get-answer?roomId=${roomId}`);
+            return res.status === 200 ? JSON.parse(await res.text()) : null;
+        }
+
+        async function handleFiles(files) {
+            const roomId = await createRoom();
+            messages.textContent = `Share this link: ${signalingServer}?roomId=${roomId}`;
+            peerConnection = new RTCPeerConnection();
             dataChannel = peerConnection.createDataChannel("fileTransfer");
 
             dataChannel.onopen = () => {
-                messageDiv.textContent = "接続が確立しました。ファイルを送信します...";
-                sendFile(file);
-            };
-
-            dataChannel.onclose = () => {
-                messageDiv.textContent = "データチャネルが閉じられました。";
-            };
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) return;
-
-                const offer = JSON.stringify(peerConnection.localDescription);
-                const encodedOffer = encodeURIComponent(offer);
-                const link = `${window.location.origin}${window.location.pathname}?offer=${encodedOffer}`;
-                shareLink.innerHTML = `<a href="${link}" target="_blank">${link}</a>`;
-                navigator.clipboard.writeText(link).then(() => {
-                    messageDiv.textContent = "リンクをクリップボードにコピーしました！";
-                });
+                dataChannel.send(files[0]);
+                messages.textContent = "File sent!";
             };
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
+            await sendOffer(roomId, peerConnection.localDescription);
+
+            const answer = await getAnswer(roomId);
+            await peerConnection.setRemoteDescription(answer);
         }
 
-        // ファイル送信
-        function sendFile(file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                dataChannel.send(reader.result);
-                messageDiv.textContent = "ファイル送信が完了しました！";
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        // リモート接続を開始（受信側）
-        async function receiveConnection(offer) {
-            peerConnection = new RTCPeerConnection(config);
-
-            peerConnection.ondatachannel = (event) => {
-                dataChannel = event.channel;
-
-                const receivedChunks = [];
-                dataChannel.onmessage = (e) => {
-                    receivedChunks.push(e.data);
-
-                    // 受信したデータをダウンロード
-                    const blob = new Blob(receivedChunks);
-                    const link = document.createElement("a");
-                    link.href = URL.createObjectURL(blob);
-                    link.download = "received_file";
-                    link.click();
-
-                    messageDiv.textContent = "ファイル受信が完了しました！";
-                };
-            };
-
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-        }
-
-        // オファーがURLに含まれている場合、受信処理を開始
-        const urlParams = new URLSearchParams(window.location.search);
-        const offerParam = urlParams.get("offer");
-        if (offerParam) {
-            const offer = JSON.parse(decodeURIComponent(offerParam));
-            receiveConnection(offer);
-        }
+        dropZone.addEventListener("dragover", (e) => e.preventDefault());
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            handleFiles(e.dataTransfer.files);
+        });
     </script>
 </body>
 </html>
