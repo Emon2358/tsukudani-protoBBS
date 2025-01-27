@@ -38,12 +38,6 @@
             justify-content: space-between;
             align-items: center;
         }
-        .share-link {
-            color: blue;
-            text-decoration: underline;
-            cursor: pointer;
-            margin-left: 10px;
-        }
     </style>
 </head>
 <body>
@@ -60,104 +54,99 @@
     <div id="fileList"></div>
 
     <script>
-        // デバッグ用のコンソールログを追加
-        console.log('スクリプト開始');
+        let db;
+        const dbName = 'FileShareDB';
+        const storeName = 'files';
 
+        // IndexedDBの初期化
+        function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, 1);
+
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    db.createObjectStore(storeName, { keyPath: 'id' });
+                };
+
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    resolve(db);
+                };
+
+                request.onerror = (event) => {
+                    reject('IndexedDB初期化エラー');
+                };
+            });
+        }
+
+        // ファイルをIndexedDBに保存
+        function saveFileToIndexedDB(file, shareKey) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+
+                const fileData = {
+                    id: shareKey,
+                    name: file.name,
+                    type: file.type,
+                    data: file
+                };
+
+                const request = store.add(fileData);
+
+                request.onsuccess = () => resolve(shareKey);
+                request.onerror = () => reject('ファイル保存エラー');
+            });
+        }
+
+        // IndexedDBからファイルを取得
+        function getFileFromIndexedDB(shareKey) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([storeName], 'readonly');
+                const store = transaction.objectStore(storeName);
+                const request = store.get(shareKey);
+
+                request.onsuccess = (event) => {
+                    resolve(event.target.result);
+                };
+
+                request.onerror = () => reject('ファイル取得エラー');
+            });
+        }
+
+        // ドラッグ＆ドロップイベントの設定
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
 
-        // ファイル共有用のグローバルストレージ
-        const sharedFiles = {};
-
-        // ドラッグ＆ドロップイベント設定
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, preventDefaults, false);
-        });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, highlight, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, unhighlight, false);
-        });
-
-        function highlight() {
-            dropZone.classList.add('dragover');
-        }
-
-        function unhighlight() {
-            dropZone.classList.remove('dragover');
-        }
+        // イベントリスナーの設定（省略）
 
         // ファイル処理
-        dropZone.addEventListener('drop', handleDrop, false);
-        fileInput.addEventListener('change', handleFiles, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            handleFiles(files);
-        }
-
-        function handleFiles(files) {
-            console.log('ファイル処理開始');
+        async function handleFiles(files) {
             files = files.target ? files.target.files : files;
             
-            Array.from(files).forEach(processFile);
+            for (let file of files) {
+                await processFile(file);
+            }
         }
 
-        function processFile(file) {
-            console.log('個別ファイル処理開始:', file.name);
+        async function processFile(file) {
+            const shareKey = generateShareKey();
 
-            // ファイルタイプと容量の制限を緩和（デバッグのため）
-            // const allowedType = 'video/mp4'; // MP4ファイルのみ
-            const maxSize = 1 * 1024 * 1024 * 1024; // 最大ファイルサイズ1GB
-
-            // if (file.type !== allowedType) {
-            //     alert('このファイルタイプは許可されていません。MP4ファイルのみアップロードできます。');
-            //     return;
-            // }
-
-            if (file.size > maxSize) {
-                alert('ファイルサイズが大きすぎます。最大サイズは1GBです。');
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const fileData = e.target.result;
-                const shareKey = generateShareKey();
-
-                // ファイルをsharedFilesに保存
-                sharedFiles[shareKey] = {
-                    name: sanitizeFileName(file.name),
-                    type: file.type,
-                    data: fileData // Base64データをそのまま保存
-                };
-
-                console.log('ファイル保存:', shareKey, sharedFiles[shareKey]);
+            try {
+                await saveFileToIndexedDB(file, shareKey);
 
                 // UIに共有リンクを表示
                 const fileItem = document.createElement('div');
                 fileItem.classList.add('file-item');
                 fileItem.innerHTML = `
                     <span>${file.name}</span>
-                    <span class="share-link" onclick="copyShareLink('${shareKey}')">共有リンクをコピー</span>
+                    <button onclick="copyShareLink('${shareKey}')">共有リンク</button>
                 `;
                 fileList.appendChild(fileItem);
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function sanitizeFileName(name) {
-            return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            } catch (error) {
+                console.error('ファイル処理エラー:', error);
+            }
         }
 
         function generateShareKey() {
@@ -165,41 +154,56 @@
         }
 
         function copyShareLink(key) {
-            console.log('共有リンク生成:', key);
-            const shareLink = `${window.location.href}?share=${key}`;
+            const shareLink = `${window.location.origin}${window.location.pathname}?share=${key}`;
             
-            // クリップボードにコピー
             navigator.clipboard.writeText(shareLink).then(() => {
-                alert('共有リンクをクリップボードにコピーしました！\n' + shareLink);
+                alert('共有リンクをコピーしました！');
             }).catch(err => {
-                console.error('クリップボードコピーエラー:', err);
                 prompt('共有リンクをコピーしてください:', shareLink);
             });
         }
 
-        // 共有ファイルのダウンロード処理
-        window.onload = function() {
-            console.log('ページ読み込み完了');
-            
+        // ページ読み込み時の処理
+        async function initPage() {
+            await initIndexedDB();
+
             const urlParams = new URLSearchParams(window.location.search);
             const shareKey = urlParams.get('share');
 
-            console.log('共有キー:', shareKey);
-            console.log('保存されたファイル:', sharedFiles);
-
-            if (shareKey && sharedFiles[shareKey]) {
-                const sharedFile = sharedFiles[shareKey];
-                console.log('ダウンロードするファイル:', sharedFile);
-
-                const link = document.createElement('a');
-                link.href = sharedFile.data;
-                link.download = sharedFile.name;
-                link.click();
-            } else {
-                console.log('ファイルが見つかりません');
-                alert('ファイルが見つかりません。');
+            if (shareKey) {
+                try {
+                    const sharedFile = await getFileFromIndexedDB(shareKey);
+                    
+                    if (sharedFile) {
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(sharedFile.data);
+                        link.download = sharedFile.name;
+                        link.click();
+                    }
+                } catch (error) {
+                    console.error('ファイルダウンロードエラー:', error);
+                }
             }
         }
+
+        // イベントリスナーの設定
+        window.addEventListener('load', initPage);
+        fileInput.addEventListener('change', handleFiles);
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
     </script>
 </body>
 </html>
