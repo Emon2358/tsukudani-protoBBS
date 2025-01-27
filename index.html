@@ -58,8 +58,8 @@
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
 
-        // ファイル共有用のグローバルストレージ
-        const sharedFiles = new Map();
+        // ローカルストレージから共有ファイルを読み込む
+        const sharedFiles = new Map(JSON.parse(localStorage.getItem('sharedFiles') || '[]'));
 
         // ドラッグ＆ドロップイベント
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -129,6 +129,9 @@
                     data: btoa(fileData) // Base64エンコーディング
                 });
 
+                // ローカルストレージに保存
+                localStorage.setItem('sharedFiles', JSON.stringify(Array.from(sharedFiles.entries())));
+
                 // UIに共有リンクを表示
                 const fileItem = document.createElement('div');
                 fileItem.classList.add('file-item');
@@ -172,7 +175,18 @@
                     alert('ファイルが見つかりません。');
                 }
             }
-        }
+
+            // 既存のファイルリストを表示
+            Array.from(sharedFiles.entries()).forEach(([key, fileData]) => {
+                const fileItem = document.createElement('div');
+                fileItem.classList.add('file-item');
+                fileItem.innerHTML = `
+                    <span>${fileData.name}</span>
+                    <button onclick="copyShareLink('${key}')">共有リンクをコピー</button>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        };
     </script>
 </body>
 </html>
