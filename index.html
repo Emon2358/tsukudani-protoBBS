@@ -63,16 +63,8 @@
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
 
-        // ローカルストレージからファイル情報を取得
-        function getSharedFiles() {
-            const storedFiles = localStorage.getItem('sharedFiles');
-            return storedFiles ? JSON.parse(storedFiles) : {};
-        }
-
-        // ファイル情報をローカルストレージに保存
-        function saveSharedFiles(files) {
-            localStorage.setItem('sharedFiles', JSON.stringify(files));
-        }
+        // ファイル共有用のグローバルストレージ
+        const sharedFiles = new Map();
 
         // ドラッグ＆ドロップイベント設定
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -135,18 +127,12 @@
                 const fileData = e.target.result;
                 const shareKey = generateShareKey();
 
-                // 既存の共有ファイル情報を取得
-                const sharedFiles = getSharedFiles();
-
-                // 新しいファイル情報を追加
-                sharedFiles[shareKey] = {
+                // ファイルをsharedFilesに保存
+                sharedFiles.set(shareKey, {
                     name: sanitizeFileName(file.name),
                     type: file.type,
                     data: btoa(fileData) // Base64エンコーディング
-                };
-
-                // ローカルストレージに保存
-                saveSharedFiles(sharedFiles);
+                });
 
                 // UIに共有リンクを表示
                 const fileItem = document.createElement('div');
@@ -181,9 +167,7 @@
             const shareKey = urlParams.get('share');
 
             if (shareKey) {
-                const sharedFiles = getSharedFiles();
-                const sharedFile = sharedFiles[shareKey];
-
+                const sharedFile = sharedFiles.get(shareKey);
                 if (sharedFile) {
                     const link = document.createElement('a');
                     link.href = `data:${sharedFile.type};base64,${sharedFile.data}`; // Base64データを使用
@@ -197,6 +181,3 @@
     </script>
 </body>
 </html>
-
-
-
