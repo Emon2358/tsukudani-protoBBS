@@ -59,7 +59,7 @@
         const fileList = document.getElementById('fileList');
 
         // ローカルストレージからファイルデータを読み込む（配列として）
-        const sharedFiles = JSON.parse(localStorage.getItem('sharedFiles') || '[]');
+        let sharedFiles = JSON.parse(localStorage.getItem('sharedFiles') || '[]');
 
         // ドラッグ＆ドロップイベント
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -122,7 +122,7 @@
                 const fileData = e.target.result;
                 const shareKey = generateShareKey();
 
-                // ファイルをsharedFiles配列に追加
+                // ファイル情報をsharedFiles配列に追加
                 sharedFiles.push({
                     key: shareKey,
                     name: sanitizeFileName(file.name),
@@ -191,5 +191,6 @@
     </script>
 </body>
 </html>
+
 
 
