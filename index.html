@@ -129,7 +129,7 @@
                     data: btoa(fileData) // Base64エンコーディング
                 });
 
-                // ローカルストレージに保存
+                // ローカルストレージに保存（Mapを配列に変換して保存）
                 localStorage.setItem('sharedFiles', JSON.stringify(Array.from(sharedFiles.entries())));
 
                 // UIに共有リンクを表示
@@ -190,3 +190,4 @@
     </script>
 </body>
 </html>
+
