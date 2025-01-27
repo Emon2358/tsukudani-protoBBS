@@ -42,6 +42,7 @@
             color: blue;
             text-decoration: underline;
             cursor: pointer;
+            margin-left: 10px;
         }
     </style>
 </head>
@@ -59,32 +60,15 @@
     <div id="fileList"></div>
 
     <script>
+        // デバッグ用のコンソールログを追加
+        console.log('スクリプト開始');
+
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
 
         // ファイル共有用のグローバルストレージ
-        const sharedFiles = new Map();
-
-        // ローカルストレージからsharedFilesを復元
-        function loadSharedFiles() {
-            const storedFiles = localStorage.getItem('sharedFiles');
-            if (storedFiles) {
-                const parsedFiles = JSON.parse(storedFiles);
-                Object.entries(parsedFiles).forEach(([key, file]) => {
-                    sharedFiles.set(key, file);
-                });
-            }
-        }
-
-        // sharedFilesをローカルストレージに保存
-        function saveSharedFiles() {
-            const filesObject = Object.fromEntries(sharedFiles);
-            localStorage.setItem('sharedFiles', JSON.stringify(filesObject));
-        }
-
-        // ページ読み込み時にファイルを復元
-        loadSharedFiles();
+        const sharedFiles = {};
 
         // ドラッグ＆ドロップイベント設定
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -123,19 +107,23 @@
         }
 
         function handleFiles(files) {
+            console.log('ファイル処理開始');
             files = files.target ? files.target.files : files;
             
             Array.from(files).forEach(processFile);
         }
 
         function processFile(file) {
-            const allowedType = 'video/mp4'; // MP4ファイルのみ
+            console.log('個別ファイル処理開始:', file.name);
+
+            // ファイルタイプと容量の制限を緩和（デバッグのため）
+            // const allowedType = 'video/mp4'; // MP4ファイルのみ
             const maxSize = 1 * 1024 * 1024 * 1024; // 最大ファイルサイズ1GB
 
-            if (file.type !== allowedType) {
-                alert('このファイルタイプは許可されていません。MP4ファイルのみアップロードできます。');
-                return;
-            }
+            // if (file.type !== allowedType) {
+            //     alert('このファイルタイプは許可されていません。MP4ファイルのみアップロードできます。');
+            //     return;
+            // }
 
             if (file.size > maxSize) {
                 alert('ファイルサイズが大きすぎます。最大サイズは1GBです。');
@@ -148,15 +136,13 @@
                 const shareKey = generateShareKey();
 
                 // ファイルをsharedFilesに保存
-                const fileInfo = {
+                sharedFiles[shareKey] = {
                     name: sanitizeFileName(file.name),
                     type: file.type,
-                    data: btoa(fileData) // Base64エンコーディング
+                    data: fileData // Base64データをそのまま保存
                 };
-                sharedFiles.set(shareKey, fileInfo);
 
-                // ローカルストレージに保存
-                saveSharedFiles();
+                console.log('ファイル保存:', shareKey, sharedFiles[shareKey]);
 
                 // UIに共有リンクを表示
                 const fileItem = document.createElement('div');
@@ -171,7 +157,7 @@
         }
 
         function sanitizeFileName(name) {
-            return name.replace(/[^a-zA-Z0-9._-]/g, '_'); // ファイル名のサニタイズ
+            return name.replace(/[^a-zA-Z0-9._-]/g, '_');
         }
 
         function generateShareKey() {
@@ -179,30 +165,39 @@
         }
 
         function copyShareLink(key) {
+            console.log('共有リンク生成:', key);
             const shareLink = `${window.location.href}?share=${key}`;
+            
+            // クリップボードにコピー
             navigator.clipboard.writeText(shareLink).then(() => {
-                alert('共有リンクをクリップボードにコピーしました！');
+                alert('共有リンクをクリップボードにコピーしました！\n' + shareLink);
+            }).catch(err => {
+                console.error('クリップボードコピーエラー:', err);
+                prompt('共有リンクをコピーしてください:', shareLink);
             });
         }
 
         // 共有ファイルのダウンロード処理
         window.onload = function() {
-            // ページ読み込み時にローカルストレージからファイルを読み込む
-            loadSharedFiles();
-
+            console.log('ページ読み込み完了');
+            
             const urlParams = new URLSearchParams(window.location.search);
             const shareKey = urlParams.get('share');
 
-            if (shareKey) {
-                const sharedFile = sharedFiles.get(shareKey);
-                if (sharedFile) {
-                    const link = document.createElement('a');
-                    link.href = `data:${sharedFile.type};base64,${sharedFile.data}`; // Base64データを使用
-                    link.download = sharedFile.name;
-                    link.click();
-                } else {
-                    alert('ファイルが見つかりません。');
-                }
+            console.log('共有キー:', shareKey);
+            console.log('保存されたファイル:', sharedFiles);
+
+            if (shareKey && sharedFiles[shareKey]) {
+                const sharedFile = sharedFiles[shareKey];
+                console.log('ダウンロードするファイル:', sharedFile);
+
+                const link = document.createElement('a');
+                link.href = sharedFile.data;
+                link.download = sharedFile.name;
+                link.click();
+            } else {
+                console.log('ファイルが見つかりません');
+                alert('ファイルが見つかりません。');
             }
         }
     </script>
