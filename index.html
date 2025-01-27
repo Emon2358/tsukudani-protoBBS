@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>★tsukudani@protoBBS☆</title>
+    <title>⭐︎tsukudani@protBBS★</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -10,154 +10,179 @@
             margin: 0 auto;
             padding: 20px;
             text-align: center;
-            background-color: #282c34;
             color: white;
+            background-color: #2c3e50;
         }
         #dropZone {
             border: 2px dashed #ccc;
-            border-radius: 20px;
-            width: 100%;
-            padding: 50px;
-            text-align: center;
-            background-color: rgba(255, 255, 255, 0.2);
-            transition: all 0.3s ease;
-            color: white;
-        }
-        #dropZone.dragover {
-            background-color: rgba(224, 224, 224, 0.3);
-            border-color: #999;
-        }
-        #fileList {
-            margin-top: 20px;
-            text-align: left;
-        }
-        .file-item {
-            background-color: rgba(249, 249, 249, 0.2);
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
+            border-radius: 10px;
+            padding: 30px;
+            background-color: rgba(255, 255, 255, 0.1);
+            margin-bottom: 20px;
         }
         button {
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: #3498db;
             color: white;
             border: none;
-            padding: 5px 10px;
+            padding: 10px 20px;
             border-radius: 5px;
             cursor: pointer;
+        }
+        #message {
+            margin-top: 20px;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
-    <h1>★tsukudani@protoBBS☆</h1>
-    
+    <h1>⭐︎tsukudani@protBBS★</h1>
     <div id="dropZone">
-        ファイルをここにドラッグ＆ドロップしてね☆彡
-        <input type="file" id="fileInput" multiple style="display:none;">
-        <button onclick="document.getElementById('fileInput').click()">ファイルを選択</button>
+        ファイルをここにドラッグ＆ドロップしてねん
     </div>
-
-    <div id="fileList"></div>
-
+    <button id="sendButton" disabled>リンクを生成</button>
+    <p id="connectionInfo"></p>
+    <div id="message"></div>
     <script>
         const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const fileList = document.getElementById('fileList');
+        const sendButton = document.getElementById('sendButton');
+        const connectionInfo = document.getElementById('connectionInfo');
+        const messageDiv = document.getElementById('message');
 
-        // ファイル処理
-        async function handleFiles(files) {
-            files = files.target ? files.target.files : files;
-            for (let file of files) {
-                await processFile(file);
+        let peerConnection;
+        let dataChannel;
+
+        const config = {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" } // STUNサーバーでNATを超える
+            ]
+        };
+
+        // ドラッグ＆ドロップでファイルを取得
+        dropZone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = "green";
+        });
+
+        dropZone.addEventListener("dragleave", () => {
+            dropZone.style.borderColor = "#ccc";
+        });
+
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
             }
+        });
+
+        // ファイルを処理
+        function handleFile(file) {
+            sendButton.disabled = false;
+            sendButton.textContent = `${file.name} を共有する準備ができました`;
+            sendButton.addEventListener("click", () => initiateConnection(file));
         }
 
-        async function processFile(file) {
-            const base64 = await fileToBase64(file);
-            const shareLink = `${window.location.origin}${window.location.pathname}?name=${encodeURIComponent(file.name)}&data=${encodeURIComponent(base64)}`;
-            
-            const fileItem = document.createElement('div');
-            fileItem.classList.add('file-item');
-            fileItem.innerHTML = `
-                <span>${file.name}</span>
-                <button onclick="copyToClipboard('${shareLink}')">共有リンクをコピー</button>
-            `;
-            fileList.appendChild(fileItem);
+        // WebRTC接続を初期化
+        async function initiateConnection(file) {
+            peerConnection = new RTCPeerConnection(config);
+            dataChannel = peerConnection.createDataChannel("fileTransfer");
+
+            dataChannel.onopen = () => {
+                messageDiv.textContent = "接続が確立しました。ファイルを送信します...";
+                sendFile(file);
+            };
+
+            dataChannel.onclose = () => {
+                messageDiv.textContent = "データチャネルが閉じられました。";
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) return;
+
+                const offer = JSON.stringify(peerConnection.localDescription);
+                connectionInfo.textContent = `このリンクをコピーして相手に送信してください:\n\n${window.location.origin}${window.location.pathname}?offer=${encodeURIComponent(offer)}`;
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
         }
 
-        // ファイルをBase64に変換
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]); // Base64部分だけ抽出
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
+        // ファイルをチャンク単位で送信
+        function sendFile(file) {
+            const chunkSize = 16 * 1024; // 16KBチャンク
+            const fileReader = new FileReader();
+            let offset = 0;
+
+            fileReader.onload = (e) => {
+                dataChannel.send(e.target.result);
+                offset += e.target.result.byteLength;
+
+                if (offset < file.size) {
+                    readSlice(offset);
+                } else {
+                    messageDiv.textContent = "ファイル送信が完了したよん〜";
+                    dataChannel.close();
+                }
+            };
+
+            const readSlice = (o) => {
+                const slice = file.slice(o, o + chunkSize);
+                fileReader.readAsArrayBuffer(slice);
+            };
+
+            readSlice(0);
         }
 
-        // 共有リンクをクリップボードにコピー
-        function copyToClipboard(link) {
-            navigator.clipboard.writeText(link).then(() => {
-                alert('共有リンクをコピーしました！');
-            }).catch(() => {
-                prompt('共有リンクをコピーしてください:', link);
-            });
-        }
+        // リモート接続を開始（受信側）
+        async function receiveConnection(offer) {
+            peerConnection = new RTCPeerConnection(config);
 
-        // ページ読み込み時の処理
-        async function initPage() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const fileName = urlParams.get('name');
-            const base64Data = urlParams.get('data');
+            peerConnection.ondatachannel = (event) => {
+                dataChannel = event.channel;
 
-            if (fileName && base64Data) {
-                const file = base64ToBlob(base64Data, fileName);
-                downloadFile(file, fileName);
-            }
-        }
+                const receivedChunks = [];
+                let receivedSize = 0;
 
-        // Base64をBlobに変換
-        function base64ToBlob(base64, fileName) {
-            const byteString = atob(base64);
-            const arrayBuffer = new ArrayBuffer(byteString.length);
-            const uint8Array = new Uint8Array(arrayBuffer);
+                dataChannel.onmessage = (e) => {
+                    receivedChunks.push(e.data);
+                    receivedSize += e.data.byteLength;
 
-            for (let i = 0; i < byteString.length; i++) {
-                uint8Array[i] = byteString.charCodeAt(i);
-            }
+                    messageDiv.textContent = `ファイル受信中... (${Math.round(receivedSize / 1024)} KB)`;
 
-            return new Blob([arrayBuffer]);
+                    if (receivedSize === parseInt(e.data.byteLength)) {
+                        downloadFile(receivedChunks);
+                    }
+                };
+
+                dataChannel.onclose = () => {
+                    messageDiv.textContent = "データチャネルが閉じられましたよん";
+                };
+            };
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            connectionInfo.textContent = "接続を開始しました。";
         }
 
         // ファイルをダウンロード
-        function downloadFile(blob, fileName) {
-            const link = document.createElement('a');
+        function downloadFile(chunks) {
+            const blob = new Blob(chunks);
+            const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = fileName;
+            link.download = "received_file";
             link.click();
+            messageDiv.textContent = "ファイル受信が完了しま〜した";
         }
 
-        // イベントリスナーの設定
-        window.addEventListener('load', initPage);
-        fileInput.addEventListener('change', handleFiles);
-        
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            handleFiles(e.dataTransfer.files);
-        });
+        // オファーから接続を処理
+        const urlParams = new URLSearchParams(window.location.search);
+        const offerParam = urlParams.get("offer");
+        if (offerParam) {
+            const offer = JSON.parse(decodeURIComponent(offerParam));
+            receiveConnection(offer);
+        }
     </script>
 </body>
 </html>
