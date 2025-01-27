@@ -58,8 +58,8 @@
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
 
-        // ローカルストレージから共有ファイルを読み込む
-        const sharedFiles = new Map(JSON.parse(localStorage.getItem('sharedFiles') || '[]'));
+        // ローカルストレージからファイルデータを読み込む（配列として）
+        const sharedFiles = JSON.parse(localStorage.getItem('sharedFiles') || '[]');
 
         // ドラッグ＆ドロップイベント
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -122,15 +122,16 @@
                 const fileData = e.target.result;
                 const shareKey = generateShareKey();
 
-                // ファイルをローカルストレージに保存
-                sharedFiles.set(shareKey, {
+                // ファイルをsharedFiles配列に追加
+                sharedFiles.push({
+                    key: shareKey,
                     name: sanitizeFileName(file.name),
                     type: file.type,
                     data: btoa(fileData) // Base64エンコーディング
                 });
 
-                // ローカルストレージに保存（Mapを配列に変換して保存）
-                localStorage.setItem('sharedFiles', JSON.stringify(Array.from(sharedFiles.entries())));
+                // ローカルストレージに保存
+                localStorage.setItem('sharedFiles', JSON.stringify(sharedFiles));
 
                 // UIに共有リンクを表示
                 const fileItem = document.createElement('div');
@@ -165,7 +166,7 @@
             const shareKey = urlParams.get('share');
 
             if (shareKey) {
-                const sharedFile = sharedFiles.get(shareKey);
+                const sharedFile = sharedFiles.find(file => file.key === shareKey);
                 if (sharedFile) {
                     const link = document.createElement('a');
                     link.href = `data:${sharedFile.type};base64,${sharedFile.data}`; // Base64データを使用
@@ -177,12 +178,12 @@
             }
 
             // 既存のファイルリストを表示
-            Array.from(sharedFiles.entries()).forEach(([key, fileData]) => {
+            sharedFiles.forEach(fileData => {
                 const fileItem = document.createElement('div');
                 fileItem.classList.add('file-item');
                 fileItem.innerHTML = `
                     <span>${fileData.name}</span>
-                    <button onclick="copyShareLink('${key}')">共有リンクをコピー</button>
+                    <button onclick="copyShareLink('${fileData.key}')">共有リンクをコピー</button>
                 `;
                 fileList.appendChild(fileItem);
             });
@@ -190,4 +191,5 @@
     </script>
 </body>
 </html>
+
 
