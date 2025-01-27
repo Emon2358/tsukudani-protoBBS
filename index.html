@@ -10,10 +10,7 @@
             margin: 0 auto;
             padding: 20px;
             text-align: center;
-            background-image: url('https://www.lettuceclub.net/i/R1/img/dish/1/S20160925033001A_000.png?w=450');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
+            background-color: #282c34;
             color: white;
         }
         #dropZone {
@@ -23,7 +20,6 @@
             padding: 50px;
             text-align: center;
             background-color: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
             transition: all 0.3s ease;
             color: white;
         }
@@ -43,11 +39,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            backdrop-filter: blur(10px);
             color: white;
-        }
-        h1 {
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
         button {
             background-color: rgba(0, 0, 0, 0.5);
@@ -65,75 +57,12 @@
     <div id="dropZone">
         ファイルをここにドラッグ＆ドロップしてね☆彡
         <input type="file" id="fileInput" multiple style="display:none;">
-        <button onclick="document.getElementById('fileInput').click()">
-            ファイルを選択
-        </button>
+        <button onclick="document.getElementById('fileInput').click()">ファイルを選択</button>
     </div>
 
     <div id="fileList"></div>
 
     <script>
-        let db;
-        const dbName = 'FileShareDB';
-        const storeName = 'files';
-
-        // IndexedDBの初期化
-        function initIndexedDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(dbName, 1);
-
-                request.onupgradeneeded = (event) => {
-                    db = event.target.result;
-                    db.createObjectStore(storeName, { keyPath: 'id' });
-                };
-
-                request.onsuccess = (event) => {
-                    db = event.target.result;
-                    resolve(db);
-                };
-
-                request.onerror = (event) => {
-                    reject('IndexedDB初期化エラー');
-                };
-            });
-        }
-
-        // ファイルをIndexedDBに保存
-        function saveFileToIndexedDB(file, shareKey) {
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([storeName], 'readwrite');
-                const store = transaction.objectStore(storeName);
-
-                const fileData = {
-                    id: shareKey,
-                    name: file.name,
-                    type: file.type,
-                    data: file
-                };
-
-                const request = store.add(fileData);
-
-                request.onsuccess = () => resolve(shareKey);
-                request.onerror = () => reject('ファイル保存エラー');
-            });
-        }
-
-        // IndexedDBからファイルを取得
-        function getFileFromIndexedDB(shareKey) {
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction([storeName], 'readonly');
-                const store = transaction.objectStore(storeName);
-                const request = store.get(shareKey);
-
-                request.onsuccess = (event) => {
-                    resolve(event.target.result);
-                };
-
-                request.onerror = () => reject('ファイル取得エラー');
-            });
-        }
-
-        // ドラッグ＆ドロップイベントの設定
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
@@ -141,66 +70,74 @@
         // ファイル処理
         async function handleFiles(files) {
             files = files.target ? files.target.files : files;
-            
             for (let file of files) {
                 await processFile(file);
             }
         }
 
         async function processFile(file) {
-            const shareKey = generateShareKey();
-
-            try {
-                await saveFileToIndexedDB(file, shareKey);
-
-                // UIに共有リンクを表示
-                const fileItem = document.createElement('div');
-                fileItem.classList.add('file-item');
-                fileItem.innerHTML = `
-                    <span>${file.name}</span>
-                    <button onclick="copyShareLink('${shareKey}')">共有リンク</button>
-                `;
-                fileList.appendChild(fileItem);
-            } catch (error) {
-                console.error('ファイル処理エラー:', error);
-            }
-        }
-
-        function generateShareKey() {
-            return Math.random().toString(36).substring(2, 10);
-        }
-
-        function copyShareLink(key) {
-            const shareLink = `${window.location.origin}${window.location.pathname}?share=${key}`;
+            const base64 = await fileToBase64(file);
+            const shareLink = `${window.location.origin}${window.location.pathname}?name=${encodeURIComponent(file.name)}&data=${encodeURIComponent(base64)}`;
             
-            navigator.clipboard.writeText(shareLink).then(() => {
-                alert('共有リンクをコピーしました〜ん');
-            }).catch(err => {
-                prompt('共有リンクをコピーしてくださ〜い:', shareLink);
+            const fileItem = document.createElement('div');
+            fileItem.classList.add('file-item');
+            fileItem.innerHTML = `
+                <span>${file.name}</span>
+                <button onclick="copyToClipboard('${shareLink}')">共有リンクをコピー</button>
+            `;
+            fileList.appendChild(fileItem);
+        }
+
+        // ファイルをBase64に変換
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]); // Base64部分だけ抽出
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 共有リンクをクリップボードにコピー
+        function copyToClipboard(link) {
+            navigator.clipboard.writeText(link).then(() => {
+                alert('共有リンクをコピーしました！');
+            }).catch(() => {
+                prompt('共有リンクをコピーしてください:', link);
             });
         }
 
         // ページ読み込み時の処理
         async function initPage() {
-            await initIndexedDB();
-
             const urlParams = new URLSearchParams(window.location.search);
-            const shareKey = urlParams.get('share');
+            const fileName = urlParams.get('name');
+            const base64Data = urlParams.get('data');
 
-            if (shareKey) {
-                try {
-                    const sharedFile = await getFileFromIndexedDB(shareKey);
-                    
-                    if (sharedFile) {
-                        const link = document.createElement('a');
-                        link.href = URL.createObjectURL(sharedFile.data);
-                        link.download = sharedFile.name;
-                        link.click();
-                    }
-                } catch (error) {
-                    console.error('ふぁいるだうんろーどえらー:', error);
-                }
+            if (fileName && base64Data) {
+                const file = base64ToBlob(base64Data, fileName);
+                downloadFile(file, fileName);
             }
+        }
+
+        // Base64をBlobに変換
+        function base64ToBlob(base64, fileName) {
+            const byteString = atob(base64);
+            const arrayBuffer = new ArrayBuffer(byteString.length);
+            const uint8Array = new Uint8Array(arrayBuffer);
+
+            for (let i = 0; i < byteString.length; i++) {
+                uint8Array[i] = byteString.charCodeAt(i);
+            }
+
+            return new Blob([arrayBuffer]);
+        }
+
+        // ファイルをダウンロード
+        function downloadFile(blob, fileName) {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            link.click();
         }
 
         // イベントリスナーの設定
@@ -224,4 +161,3 @@
     </script>
 </body>
 </html>
-
