@@ -1,63 +1,75 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ファイル共有システム</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-    }
-    #fileInput {
-      margin: 20px 0;
-    }
-    #shareLink {
-      margin: 20px;
-      color: blue;
-      cursor: pointer;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>プロキシサービス</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            text-align: center;
+        }
+        input, button {
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <h1>ファイル共有システム</h1>
-  <p>ファイルを選択してください:</p>
-  <input type="file" id="fileInput" />
-  <button id="uploadBtn">アップロード</button>
-  <p id="shareLink"></p>
+    <h1>プロキシサービスを使ったサイトアクセス</h1>
+    <p>以下にアクセスしたいURLを入力してください。</p>
+    
+    <input type="text" id="urlInput" placeholder="URLを入力 (例: https://example.com)">
+    <button onclick="accessThroughProxy()">プロキシを使ってアクセス</button>
+    
+    <div id="result">
+        <h3>レスポンス:</h3>
+        <pre id="responseOutput"></pre>
+    </div>
 
-  <script>
-    const uploadBtn = document.getElementById('uploadBtn');
-    const fileInput = document.getElementById('fileInput');
-    const shareLink = document.getElementById('shareLink');
+    <script>
+        async function accessThroughProxy() {
+            const urlInput = document.getElementById('urlInput').value.trim();
+            const resultDiv = document.getElementById('result');
+            const responseOutput = document.getElementById('responseOutput');
+            
+            if (!urlInput) {
+                alert('URLを入力してください。');
+                return;
+            }
 
-    uploadBtn.addEventListener('click', async () => {
-      const file = fileInput.files[0];
-      if (!file) {
-        alert('ファイルを選択してください');
-        return;
-      }
+            try {
+                // ドメインを含むURLをそのままプロキシサーバーに送信
+                const proxyUrl = `https://<your-deno-deploy-url>/?target=${encodeURIComponent(urlInput)}`;
+                
+                // プロキシサーバーへのリクエスト
+                const response = await fetch(proxyUrl);
 
-      // ファイルをサーバーに送信
-      const formData = new FormData();
-      formData.append('file', file);
+                if (!response.ok) {
+                    throw new Error('プロキシサーバーからの応答が失敗しました。');
+                }
 
-      const response = await fetch('/upload', {
-        method: 'POST',
-        body: formData,
-      });
+                const text = await response.text();
 
-      if (response.ok) {
-        const { url } = await response.json();
-        shareLink.textContent = `共有リンク: ${url}`;
-        shareLink.onclick = () => {
-          navigator.clipboard.writeText(url);
-          alert('リンクをコピーしました');
-        };
-      } else {
-        alert('アップロードに失敗しました');
-      }
-    });
-  </script>
+                // レスポンスを表示
+                resultDiv.style.display = 'block';
+                responseOutput.textContent = text;
+            } catch (error) {
+                console.error('エラー:', error);
+                alert('エラーが発生しました。コンソールで詳細をご確認ください。');
+            }
+        }
+    </script>
 </body>
 </html>
