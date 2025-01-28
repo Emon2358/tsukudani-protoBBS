@@ -86,7 +86,7 @@
                     (url.startsWith('http') ? url : `${currentBaseUrl}${url}`) 
                     : urlInput;
 
-                const proxyUrl = `https://your-deno-deploy-url.deno.dev/?target=${encodeURIComponent(finalUrl)}`;
+                const proxyUrl = `https://tsuk.deno.dev/?target=${encodeURIComponent(finalUrl)}`;
                 
                 const response = await fetch(proxyUrl);
 
