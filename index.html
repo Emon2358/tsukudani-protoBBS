@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>プロキシサービス</title>
+    <title>高度なプロキシサービス</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,19 +16,41 @@
             padding: 10px;
             margin-top: 10px;
             font-size: 16px;
+            width: 70%;
         }
-        #result {
+        #result, #navigationLinks {
             margin-top: 20px;
             padding: 20px;
             background-color: #e0e0e0;
             border-radius: 5px;
+        }
+        #result {
             display: none;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+        #navigationLinks {
+            display: none;
+        }
+        .link-button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
-    <h1>プロキシサービスを使ったサイトアクセス</h1>
-    <p>以下にアクセスしたいURLを入力してください。</p>
+    <h1>高度なプロキシサービス</h1>
+    <p>アクセスしたいURLを入力してください</p>
     
     <input type="text" id="urlInput" placeholder="URLを入力 (例: https://example.com)">
     <button onclick="accessThroughProxy()">プロキシを使ってアクセス</button>
@@ -38,11 +60,20 @@
         <pre id="responseOutput"></pre>
     </div>
 
+    <div id="navigationLinks">
+        <h3>リンク一覧:</h3>
+        <div id="linkContainer"></div>
+    </div>
+
     <script>
-        async function accessThroughProxy() {
-            const urlInput = document.getElementById('urlInput').value.trim();
+        let currentBaseUrl = ''; // 現在のベースURL
+
+        async function accessThroughProxy(url = null) {
+            const urlInput = url || document.getElementById('urlInput').value.trim();
             const resultDiv = document.getElementById('result');
             const responseOutput = document.getElementById('responseOutput');
+            const navigationLinksDiv = document.getElementById('navigationLinks');
+            const linkContainer = document.getElementById('linkContainer');
             
             if (!urlInput) {
                 alert('URLを入力してください。');
@@ -50,10 +81,13 @@
             }
 
             try {
-                // ドメインを含むURLをそのままプロキシサーバーに送信
-                const proxyUrl = `https://<your-deno-deploy-url>/?target=${encodeURIComponent(urlInput)}`;
+                // 相対URLの場合は、ベースURLと結合
+                const finalUrl = url ? 
+                    (url.startsWith('http') ? url : `${currentBaseUrl}${url}`) 
+                    : urlInput;
+
+                const proxyUrl = `https://your-deno-deploy-url.deno.dev/?target=${encodeURIComponent(finalUrl)}`;
                 
-                // プロキシサーバーへのリクエスト
                 const response = await fetch(proxyUrl);
 
                 if (!response.ok) {
@@ -61,13 +95,43 @@
                 }
 
                 const text = await response.text();
+                const originalUrl = response.headers.get('X-Original-URL');
+
+                // ベースURLを更新
+                currentBaseUrl = new URL(originalUrl).origin + '/';
 
                 // レスポンスを表示
                 resultDiv.style.display = 'block';
                 responseOutput.textContent = text;
+
+                // リンクを抽出して表示
+                const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>/gi;
+                const links = [];
+                let match;
+                while ((match = linkRegex.exec(text)) !== null) {
+                    links.push(match[1]);
+                }
+
+                // リンクコンテナをクリアして新しいリンクを追加
+                linkContainer.innerHTML = '';
+                if (links.length > 0) {
+                    navigationLinksDiv.style.display = 'block';
+                    links.forEach(link => {
+                        const linkButton = document.createElement('button');
+                        linkButton.textContent = link;
+                        linkButton.className = 'link-button';
+                        linkButton.onclick = () => accessThroughProxy(link);
+                        linkContainer.appendChild(linkButton);
+                    });
+                } else {
+                    navigationLinksDiv.style.display = 'none';
+                }
+
             } catch (error) {
                 console.error('エラー:', error);
                 alert('エラーが発生しました。コンソールで詳細をご確認ください。');
+                resultDiv.style.display = 'block';
+                responseOutput.textContent = error.toString();
             }
         }
     </script>
